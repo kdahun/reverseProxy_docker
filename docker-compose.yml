@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  # ── Reverse Proxy (해안국 측) — Nginx 단독 ─────────────────
+  # restAPI 서버는 별도 환경에서 실행 중 → API_HOST:API_PORT 로 포워딩
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: reverse-proxy
+    network_mode: host          # 외부 restAPI 서버에 직접 라우팅하기 위해 host 모드 사용
+                                # (bridge 모드 시 외부 IP 접근에 extra_hosts 필요)
+    environment:
+      API_HOST: "192.168.50.4"  # restAPI 서버 IP
+      API_PORT: "28080"         # restAPI 서버 포트
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - ./logs/nginx:/var/log/nginx
+    entrypoint: ["/entrypoint.sh"]
+    restart: unless-stopped
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "5"

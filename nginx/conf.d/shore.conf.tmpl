@@ -1,0 +1,72 @@
+# ── Upstream: 외부 restAPI 서버 ────────────────────────────
+# API_HOST / API_PORT 는 entrypoint.sh 에서 envsubst 로 치환됨
+upstream api_server {
+    server ${API_HOST}:${API_PORT};
+    keepalive 16;
+}
+
+# ────────────────────────────────────────────────────────────
+# REST API + WebSocket  (선박 HAProxy :28080 → 해안 Nginx :28080 → restAPI)
+#   WebSocket 경로 : /api/push/ws, /hello/push/ws
+#   REST 경로      : /api/health, /api/session, /hello
+# ────────────────────────────────────────────────────────────
+server {
+    listen 28080;
+    server_name _;
+
+    # ── REST API ───────────────────────────────────────────
+    location = /api/test {
+        proxy_pass         http://api_server;
+        proxy_set_header   Host             $host;
+        proxy_set_header   X-Real-IP        $remote_addr;
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Ship-ID        $http_x_forwarded_for;
+    }
+
+    location = /api/login {
+        limit_except POST { deny all; }
+        proxy_pass         http://api_server;
+        proxy_set_header   Host             $host;
+        proxy_set_header   X-Real-IP        $remote_addr;
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Ship-ID        $http_x_forwarded_for;
+    }
+    
+
+    # ── WebSocket ──────────────────────────────────────────
+    location /ws {
+        proxy_pass              http://api_server;
+        proxy_http_version      1.1;
+        proxy_set_header        Upgrade          $http_upgrade;
+        proxy_set_header        Connection       "upgrade";
+        proxy_set_header        Host             $host;
+        proxy_set_header        X-Real-IP        $remote_addr;
+        proxy_set_header        X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header        X-Ship-ID        $http_x_forwarded_for;
+        proxy_set_header        Authorization    $http_authorization;
+        proxy_read_timeout      3600s;
+        proxy_send_timeout      3600s;
+    }
+
+    location / {
+        return 403 '{"error":"forbidden"}';
+        add_header Content-Type application/json;
+    }
+}
+
+# ────────────────────────────────────────────────────────────
+# Nginx Status (내부 모니터링 전용)
+# ────────────────────────────────────────────────────────────
+server {
+    listen 29090;
+    server_name _;
+
+    # allow 10.0.0.0/8;
+    # allow 172.16.0.0/12;
+    # allow 192.168.0.0/16;
+    # deny  all;
+
+    location /nginx_status {
+        stub_status;
+    }
+}
