@@ -16,6 +16,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/entrypoint.sh:/entrypoint.sh:ro
       - ./logs/nginx:/var/log/nginx
+      - ./nginx/certs:/etc/nginx/certs:ro  # mTLS 인증서 (server.key, server.crt, client.crt)
     entrypoint: ["/entrypoint.sh"]
     restart: unless-stopped
     logging:

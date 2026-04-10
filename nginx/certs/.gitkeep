@@ -1,0 +1,4 @@
+# 이 폴더에 아래 3개 파일을 배치하세요 (git 추적 제외)
+# - server.key  : Nginx 개인키
+# - server.crt  : Nginx 인증서 (HAProxy에도 복사 필요)
+# - client.crt  : HAProxy 인증서 (HAProxy 서버에서 복사해온 것)
