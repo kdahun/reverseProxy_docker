@@ -19,25 +19,37 @@ if [ ! -f "$CERT_DIR/server.crt" ]; then
       -subj "/CN=Shore Gateway Reverse Proxy/O=KRINS/C=KR" \
       -out "$CERT_DIR/server.csr"
 
-    # JSON 페이로드 생성 (jq가 CSR 개행문자 이스케이프 자동 처리)
-    PAYLOAD=$(jq -n \
-      --arg csr "$(cat "$CERT_DIR/server.csr")" \
-      '{
-        certType: "REVERSE_PROXY",
-        csr: $csr,
-        subjectCn: "Shore Gateway Reverse Proxy",
-        organization: "KRINS",
-        country: "KR",
-        dnsNames: ["proxy.example.com"],
-        ipAddresses: ["192.168.50.241"]
-      }')
+    # JSON 페이로드 생성
+    PAYLOAD=$(python3 -c "
+import json
+csr = open('$CERT_DIR/server.csr').read()
+print(json.dumps({
+    'certType':     'REVERSE_PROXY',
+    'csr':          csr,
+    'subjectCn':    'Shore Gateway Reverse Proxy',
+    'organization': 'KRINS',
+    'country':      'KR',
+    'dnsNames':     ['proxy.example.com'],
+    'ipAddresses':  ['192.168.50.241']
+}))
+")
 
     # CA 서버로 JSON 전송 → 응답에서 certificatePem 추출 → server.crt 저장
-    curl -sf -X POST "$CA_URL" \
+    RESPONSE=$(curl -sf -X POST "$CA_URL" \
+      -u "admin:admin1234" \
       -H "Content-Type: application/json" \
-      -d "$PAYLOAD" \
-    | jq -r '.data.certificatePem' > "$CERT_DIR/server.crt"
+      -d "$PAYLOAD")
 
+    echo "$RESPONSE" | python3 -c "
+import json, sys
+body = json.load(sys.stdin)
+if not body.get('success'):
+    print('[entrypoint][ERROR] 인증서 발급 실패:', body.get('message'))
+    sys.exit(1)
+pem = body['data']['certificatePem']
+with open('$CERT_DIR/server.crt', 'w') as f:
+    f.write(pem)
+"
     echo "[entrypoint] server.crt 발급 완료"
 else
     echo "[entrypoint] server.crt 존재 → CA 요청 생략"
