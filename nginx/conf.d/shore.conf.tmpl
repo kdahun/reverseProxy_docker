@@ -2,7 +2,9 @@
 # API_HOST / API_PORT 는 entrypoint.sh 에서 envsubst 로 치환됨
 upstream api_server {
     server ${API_HOST}:${API_PORT};
-    keepalive 16;
+    keepalive 16;            # Nginx → API Server 유휴 keepalive 연결 최대 16개
+    keepalive_timeout  30m;  # 유휴 연결 유지 시간 (미설정 시 기본 60s → 조기 종료)
+    keepalive_requests 1000; # 연결당 최대 요청 수 (초과 시 연결 재생성)
 }
 
 # ────────────────────────────────────────────────────────────
@@ -28,9 +30,14 @@ server {
     ssl_session_cache      shared:SSL:10m;
     ssl_session_timeout    10m;
 
+    keepalive_timeout      30m;   # HAProxy와의 연결 유지 (http-reuse always 전제조건)
+    keepalive_requests     1000;
+
     # ── REST API ───────────────────────────────────────────
     location = /api/test {
         proxy_pass         http://api_server;
+        proxy_http_version 1.1;                    # HTTP/1.1 keepalive (기본값 1.0은 Connection:close → TLS 재연결 유발)
+        proxy_set_header   Connection "";           # Connection 헤더 제거 → upstream keepalive 유지
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
@@ -39,6 +46,8 @@ server {
 
     location /api/subscriptions {
         proxy_pass         http://api_server;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
@@ -48,6 +57,8 @@ server {
     location = /api/login {
         limit_except POST { deny all; }
         proxy_pass         http://api_server;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
@@ -57,6 +68,8 @@ server {
     location = /api/register {
         limit_except POST { deny all; }
         proxy_pass         http://api_server;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
@@ -66,6 +79,8 @@ server {
     location = /api/certificate {
         limit_except POST { deny all; }
         proxy_pass         http://api_server;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
