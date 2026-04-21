@@ -3,11 +3,14 @@ set -e
 
 CERT_DIR="/etc/nginx/certs"
 CA_URL="${CA_URL:-http://ca-server/api/admin/proxy-cert}"
+CA_HOST="${CA_HOST:-192.168.50.25}"
+CA_PORT="${CA_PORT:-8080}"
 API_HOST="${API_HOST:-localhost}"
 API_PORT="${API_PORT:-5000}"
 
 echo "[entrypoint] API_HOST=${API_HOST}, API_PORT=${API_PORT}"
 echo "[entrypoint] CA_URL=${CA_URL}"
+echo "[entrypoint] CA_HOST=${CA_HOST}, CA_PORT=${CA_PORT}"
 
 # CRT가 없으면 CSR 생성 → CA 전송 → CRT 저장
 if [ ! -f "$CERT_DIR/server.crt" ]; then
@@ -55,11 +58,19 @@ else
     echo "[entrypoint] server.crt 존재 → CA 요청 생략"
 fi
 
-# 템플릿 → 실제 설정 파일로 치환
-envsubst '${API_HOST} ${API_PORT}' \
+# 템플릿 → 실제 설정 파일로 치환 (CA_HOST, CA_PORT 추가)
+envsubst '${API_HOST} ${API_PORT} ${CA_HOST} ${CA_PORT}' \
   < /etc/nginx/conf.d/shore.conf.tmpl \
   > /etc/nginx/conf.d/shore.conf
 
 echo "[entrypoint] shore.conf 생성 완료"
+
+# ── cert_watch.sh 백그라운드 시작 ──────────────────────────────
+# - 기동 시 CA 에서 CRL 1회 다운로드 (ssl_crl 핸드셰이크 검증 즉시 반영)
+# - 5분마다 CRL 재갱신 + nginx reload
+# - 24시간마다 server.crt 만료 체크 → 7일 이내면 자동 재발급
+chmod +x /cert_watch.sh
+CA_HOST="${CA_HOST}" CA_PORT="${CA_PORT}" CA_URL="${CA_URL}" /cert_watch.sh &
+echo "[entrypoint] cert_watch.sh 시작 (PID=$!)"
 
 exec nginx -g "daemon off;"

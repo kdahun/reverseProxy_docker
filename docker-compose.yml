@@ -13,11 +13,14 @@ services:
     environment:
       API_HOST: ${API_HOST}
       API_PORT: ${API_PORT}
-      CA_URL: ${CA_URL}
+      CA_URL:   ${CA_URL}
+      CA_HOST:  ${CA_HOST}
+      CA_PORT:  ${CA_PORT}
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - ./nginx/cert_watch.sh:/cert_watch.sh:ro
       - ./logs/nginx:/var/log/nginx
       - ./nginx/certs:/etc/nginx/certs:rw  # mTLS 인증서 (shore.key, ca.crt → server.crt 자동 발급)
     entrypoint: ["/entrypoint.sh"]

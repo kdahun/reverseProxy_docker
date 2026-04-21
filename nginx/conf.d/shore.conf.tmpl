@@ -17,13 +17,24 @@ server {
     server_name _;
 
     # ── TLS 설정 ───────────────────────────────────────────
-    # Nginx 자신의 인증서 (HAProxy가 검증할 것)
+    # Nginx 자신의 인증서 (Squid/HAProxy 가 검증할 것)
     ssl_certificate        /etc/nginx/certs/server.crt;
     ssl_certificate_key    /etc/nginx/certs/server.key;
 
-    # mTLS: HAProxy(클라이언트) 인증서 검증
+    # mTLS: Squid(클라이언트) 인증서 검증 — TLS 핸드셰이크 중
     ssl_client_certificate /etc/nginx/certs/ca.crt;
     ssl_verify_client      on;
+    # NEW: 폐기된 client.crt 를 TLS 핸드셰이크 중 즉시 차단
+    # cert_watch.sh 가 5분마다 CA 에서 crl.pem 을 갱신 + nginx reload 로 반영
+    ssl_crl                /etc/nginx/certs/crl.pem;
+
+    # OCSP Stapling: server.crt OCSP 응답을 ServerHello 에 포함
+    # → Squid OpenSSL 이 TLS 핸드셰이크 중 자동 검증 (레이어 1)
+    # 전제조건: CA 가 발급한 인증서에 AIA OCSP URL 포함 + /pki/ocsp 엔드포인트 응답
+    ssl_stapling            on;
+    ssl_stapling_verify     on;
+    ssl_stapling_responder  http://${CA_HOST}:${CA_PORT}/pki/ocsp;
+    ssl_trusted_certificate /etc/nginx/certs/ca.crt;
 
     ssl_protocols          TLSv1.2 TLSv1.3;
     ssl_ciphers            HIGH:!aNULL:!MD5;
