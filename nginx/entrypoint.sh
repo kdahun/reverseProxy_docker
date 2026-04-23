@@ -2,12 +2,15 @@
 set -e
 
 CERT_DIR="/etc/nginx/certs"
-CA_URL="${CA_URL:-http://ca-server/api/admin/proxy-cert}"
+CA_HOST="${CA_HOST:-192.168.50.25}"
+CA_PORT="${CA_PORT:-8080}"
+CA_URL="${CA_URL:-http://${CA_HOST}:${CA_PORT}/api/admin/proxy-cert}"
 API_HOST="${API_HOST:-localhost}"
 API_PORT="${API_PORT:-5000}"
 
 echo "[entrypoint] API_HOST=${API_HOST}, API_PORT=${API_PORT}"
 echo "[entrypoint] CA_URL=${CA_URL}"
+echo "[entrypoint] CA_HOST=${CA_HOST}, CA_PORT=${CA_PORT}"
 
 # CRT가 없으면 CSR 생성 → CA 전송 → CRT 저장
 if [ ! -f "$CERT_DIR/server.crt" ]; then
@@ -56,10 +59,24 @@ else
 fi
 
 # 템플릿 → 실제 설정 파일로 치환
-envsubst '${API_HOST} ${API_PORT}' \
+envsubst '${API_HOST} ${API_PORT} ${CA_HOST} ${CA_PORT}' \
   < /etc/nginx/conf.d/shore.conf.tmpl \
   > /etc/nginx/conf.d/shore.conf
 
 echo "[entrypoint] shore.conf 생성 완료"
+
+# nginx 시작 전 CRL 선(先) 다운로드 — crl.pem 없으면 nginx 기동 실패
+echo "[entrypoint] CRL 선(先) 다운로드 시작"
+if curl -sf --max-time 15 -o "${CERT_DIR}/crl.der" "http://${CA_HOST}:${CA_PORT}/pki/crl"; then
+    if openssl crl -inform DER -in "${CERT_DIR}/crl.der" -out "${CERT_DIR}/crl.pem" 2>/dev/null; then
+        echo "[entrypoint] CRL 다운로드 완료 → crl.pem 생성됨"
+    else
+        echo "[entrypoint] CRL DER→PEM 변환 실패 — 빈 crl.pem 생성"
+        touch "${CERT_DIR}/crl.pem"
+    fi
+else
+    echo "[entrypoint] CRL 다운로드 실패 — CA 서버 미응답, 빈 crl.pem 생성"
+    touch "${CERT_DIR}/crl.pem"
+fi
 
 exec nginx -g "daemon off;"
