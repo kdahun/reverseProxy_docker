@@ -55,10 +55,30 @@ else
     echo "[entrypoint] server.crt 존재 → CA 요청 생략"
 fi
 
+# CRL 다운로드 (CA_URL에서 host:port 추출)
+CA_BASE=$(echo "$CA_URL" | sed 's|/api/.*||')
+CRL_URL="${CA_BASE}/pki/crl"
+echo "[entrypoint] CRL 다운로드: ${CRL_URL}"
+CRL_OK=0
+if curl -sf --max-time 15 -o "${CERT_DIR}/crl.der" "${CRL_URL}"; then
+    openssl crl -inform DER -in "${CERT_DIR}/crl.der" \
+                -out "${CERT_DIR}/crl.pem"
+    echo "[entrypoint] crl.pem 생성 완료"
+    CRL_OK=1
+else
+    echo "[entrypoint][WARN] CRL 다운로드 실패 — ssl_crl 비활성화"
+fi
+
 # 템플릿 → 실제 설정 파일로 치환
-envsubst '${API_HOST} ${API_PORT}' \
+envsubst '${API_HOST} ${API_PORT} ${CA_HOST} ${CA_PORT}' \
   < /etc/nginx/conf.d/shore.conf.tmpl \
   > /etc/nginx/conf.d/shore.conf
+
+# CRL 파일 없으면 ssl_crl 지시어 제거
+if [ "$CRL_OK" = "0" ]; then
+    sed -i '/ssl_crl /d' /etc/nginx/conf.d/shore.conf
+    echo "[entrypoint] shore.conf에서 ssl_crl 제거 완료"
+fi
 
 echo "[entrypoint] shore.conf 생성 완료"
 

@@ -121,6 +121,48 @@ server {
 }
 
 # ────────────────────────────────────────────────────────────
+# CA 서버 Web UI (사용자 브라우저 → HTTPS → Nginx → CA 서버)
+#   사용자 접속 : https://<Nginx-IP>:9443/login
+#   백엔드      : http://192.168.50.25:8080  (Spring Boot)
+# ────────────────────────────────────────────────────────────
+upstream ca_web_server {
+    server 192.168.50.25:8080;
+    keepalive 8;
+}
+
+server {
+    listen 9443 ssl;
+    server_name _;
+
+    # ── TLS 설정 (서버 인증서만, mTLS 없음) ───────────────────
+    ssl_certificate        /etc/nginx/certs/server.crt;
+    ssl_certificate_key    /etc/nginx/certs/server.key;
+
+    ssl_protocols          TLSv1.2 TLSv1.3;
+    ssl_ciphers            HIGH:!aNULL:!MD5;
+    ssl_session_cache      shared:SSL:5m;
+    ssl_session_timeout    10m;
+
+    # ── Spring Boot 전체 경로 프록시 ──────────────────────────
+    # /login, POST /login, CSS/JS/이미지 등 모두 백엔드로 전달
+    location / {
+        proxy_pass         http://ca_web_server;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection        "";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+
+        # Spring Security가 HTTPS임을 인식하도록 (http → https 리다이렉트 방지)
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   X-Forwarded-Port  9443;
+
+        # 백엔드가 보내는 Location 헤더(리다이렉트)의 http://를 https://로 변환
+        proxy_redirect     http://192.168.50.25:8080 https://$host:9443;
+    }
+}
+
+# ────────────────────────────────────────────────────────────
 # Nginx Status (내부 모니터링 전용)
 # ────────────────────────────────────────────────────────────
 server {
