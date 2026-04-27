@@ -28,8 +28,8 @@ server {
     ssl_crl                /etc/nginx/certs/crl.pem;
     # OCSP: client.crt 폐기 여부를 Handshake 중 실시간 검증 (Nginx 1.19.0+)
     # OCSP 응답 없으면 위 ssl_crl로 검증 (독립 동작)
-    # ssl_ocsp               on;
-    # ssl_ocsp_cache         shared:ocsp_cache:10m;
+    ssl_ocsp               on;
+    ssl_ocsp_cache         shared:ocsp_cache:10m;
     resolver               ${CA_HOST} valid=300s;
 
     # OCSP Stapling: server.crt OCSP 응답을 Handshake에 포함
@@ -140,7 +140,7 @@ server {
 
     ssl_protocols          TLSv1.2 TLSv1.3;
     ssl_ciphers            HIGH:!aNULL:!MD5;
-    ssl_session_cache      shared:SSL:5m;
+    ssl_session_cache      shared:SSL_WEB:5m;
     ssl_session_timeout    10m;
 
     # ── Spring Boot 전체 경로 프록시 ──────────────────────────
